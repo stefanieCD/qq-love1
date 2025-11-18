@@ -1,0 +1,30 @@
+name: 琪琪早安推送
+
+on:
+  schedule:
+    # 北京时间每天早上 7:30 自动运行 (UTC 23:30)
+    - cron: '30 23 * * *'
+  workflow_dispatch: # 允许手动测试
+
+jobs:
+  send-love:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v3
+      
+      - name: 设置Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: 安装依赖
+        run: pip install requests
+      
+      - name: 运行脚本
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          USER_ID: ${{ secrets.USER_ID }}
+          TEMPLATE_ID: ${{ secrets.TEMPLATE_ID }}
+        run: python main.py
