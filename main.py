@@ -10,15 +10,20 @@ import random
 try:
     APP_ID = os.environ["APP_ID"]
     APP_SECRET = os.environ["APP_SECRET"]
-    USER_ID = os.environ["USER_ID"]
     TEMPLATE_ID = os.environ["TEMPLATE_ID"]
     GPT_API_KEY = os.environ.get("GPT_API_KEY") 
 except KeyError:
     print("❌ 错误：Secrets 变量缺失！")
     sys.exit(1)
 
+# 👥 接收人列表 (把所有人的ID都放在这里)
+USERS = [
+    "o13257d7f-0B3aLMx8UGIAaGZkUY",  # 琪琪 (煤气)
+    "o13257XIz2XpWkacUw08fny0mNyE"   # 新增的用户
+]
+
 CITY = "深圳"
-# 👇 这里设置点击卡片后跳去哪里 (目前是深圳天气页，你可以换成任何网址)
+# 点击卡片跳转的地址 (比如深圳天气页)
 CLICK_URL = "https://tianqi.qq.com/index.htm" 
 # ==========================================
 
@@ -47,23 +52,28 @@ def get_week_day_str():
     week_list = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     return week_list[datetime.datetime.now().weekday()]
 
-# 🔥 核心升级：让 GPT 分两段输出
 def get_gpt_message(weather, temp, week_day):
+    """生成李杨给琪琪的早安"""
     if not GPT_API_KEY:
-        return "今天也要开心呀！", "记得吃早饭哦！"
+        return "煤气早安！今天也是爱你的一天❤️", "记得吃早饭，照顾好自己！"
 
-    print("正在请求 GPT 生成双段文案...")
+    print("正在请求 GPT 生成文案...")
     
     prompt = f"""
-    你是一个超宠女朋友的男朋友，你的女朋友叫“琪琪”。
-    今日情报：深圳，{weather}，{temp}，{week_day}。
+    【角色设定】
+    你叫“李杨”（昵称：杨杨、煤气罐），北邮研究生。
+    女朋友叫“江琪”（昵称：琪琪、煤气），中大商学院本科生。
     
-    请生成两段话，中间用 "|||" 这个符号隔开：
-    第一段（情话）：结合天气和星期几，写一段甜甜的问候，语气要软萌、宠溺，多用Emoji。
-    第二段（建议）：给出一个具体的行动建议（如穿衣、带伞、喝奶茶、吃什么早餐）。
+    【今日情报】
+    深圳，{weather}，{temp}，{week_day}。
     
-    例子格式：
-    宝早安！今天周五啦，离见面又近了一步，深圳今天阳光很好，想和你一起晒太阳✨|||今天紫外线有点强，出门记得涂防晒，还要带上我送你的小水壶哦💧
+    【任务】
+    生成两段话，用 "|||" 隔开：
+    第一段（情话）：语气宠溺、稳重但深情。结合天气/周几/异地恋/学校生活写。
+    第二段（建议）：温馨的日常嘱咐（防晒/带伞/喝水/心情）。
+    
+    例子：
+    煤气早安！今天周五啦，刚才在实验室就在想你，深圳降温了，要乖乖穿外套哦✨|||今天风大，出门记得戴好我送你的围巾，不许只要风度不要温度🧣
     """
 
     headers = {
@@ -78,58 +88,57 @@ def get_gpt_message(weather, temp, week_day):
     }
 
     try:
-        url = "https://api.openai.com/v1/chat/completions"
-        resp = requests.post(url, headers=headers, json=data, timeout=20)
+        # 使用兼容性好的中转地址
+        url = "https://api.openai-proxy.com/v1/chat/completions"
+        resp = requests.post(url, headers=headers, json=data, timeout=30)
         resp_json = resp.json()
         
         if "choices" in resp_json:
             content = resp_json["choices"][0]["message"]["content"].strip()
-            # 尝试分割
             if "|||" in content:
                 parts = content.split("|||")
                 return parts[0].strip(), parts[1].strip()
             else:
-                # 如果GPT没按套路出牌，就手动切一下或者当做一段
                 return content, "今天要开开心心的！"
     except Exception as e:
         print(f"GPT 请求失败: {e}")
         
-    return "琪琪早安！GitHub虽然累了，但我依然爱你❤️", "记得按时吃饭，照顾好自己！"
+    return "煤气早安！GitHub有点卡，但我想你不会卡❤️", "记得按时吃饭！"
 
 def send_message():
     token = get_access_token()
     if not token: return
 
+    # 1. 获取数据 (只获取一次，保证两个人生日收到的是同样的内容)
     weather, temp = get_weather()
     week_day = get_week_day_str()
     today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    
-    # 获取两段文案
     msg_1, msg_2 = get_gpt_message(weather, temp, week_day)
     
-    url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={token}"
-    
-    data = {
-        "touser": USER_ID,
-        "template_id": TEMPLATE_ID,
-        "url": CLICK_URL, # 👈 这里添加了跳转链接，现在卡片可以点击了！
-        "data": {
-            "date": {"value": f"{today_date} {week_day}", "color": "#FF69B4"},
-            "city": {"value": CITY, "color": "#173177"},
-            "weather": {"value": weather, "color": "#FFA500"},
-            "temperature": {"value": temp, "color": "#00CC00"},
-            # 第一段：情话
-            "love_msg": {"value": msg_1, "color": "#FF1493"},
-            # 第二段：建议
-            "suggestion": {"value": msg_2, "color": "#9370DB"}
+    # 2. 循环发送给列表里的每一个人
+    for user_id in USERS:
+        print(f"☁️ 正在发送给: {user_id}")
+        url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={token}"
+        
+        data = {
+            "touser": user_id,
+            "template_id": TEMPLATE_ID,
+            "url": CLICK_URL, 
+            "data": {
+                "date": {"value": f"{today_date} {week_day}", "color": "#FF69B4"},
+                "city": {"value": CITY, "color": "#173177"},
+                "weather": {"value": weather, "color": "#FFA500"},
+                "temperature": {"value": temp, "color": "#00CC00"},
+                "love_msg": {"value": msg_1, "color": "#FF1493"},
+                "suggestion": {"value": msg_2, "color": "#9370DB"}
+            }
         }
-    }
-    
-    resp = requests.post(url, json=data).json()
-    if resp['errcode'] == 0:
-        print(f"✅ 推送成功")
-    else:
-        print(f"❌ 推送失败: {resp}")
+        
+        resp = requests.post(url, json=data).json()
+        if resp['errcode'] == 0:
+            print(f"✅ 发送成功！")
+        else:
+            print(f"❌ 发送失败: {resp}")
 
 if __name__ == "__main__":
     send_message()
