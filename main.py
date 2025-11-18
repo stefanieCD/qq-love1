@@ -16,14 +16,14 @@ except KeyError:
     print("❌ 错误：Secrets 变量缺失！")
     sys.exit(1)
 
-# 👥 接收人列表 (两人都会收到)
+# 👥 接收人列表
 USERS = [
     "o13257d7f-0B3aLMx8UGIAaGZkUY",  # 琪琪 (煤气)
     "o13257XIz2XpWkacUw08fny0mNyE"   # 李杨 (煤气罐)
 ]
 
 CITY = "深圳"
-CLICK_URL = "https://tianqi.qq.com/index.htm" # 点击跳转天气页
+CLICK_URL = "https://tianqi.qq.com/index.htm"
 # ==========================================
 
 def get_access_token():
@@ -42,37 +42,37 @@ def get_weather():
         res = requests.get(url).json()
         if res and res['data'] and res['data']['list']:
             today = res['data']['list'][0]
-            return today['weather'], f"{today['low']}℃ ~ {today['high']}℃"
+            # 简化天气显示，省空间
+            return today['weather'], f"{today['low']}~{today['high']}℃"
     except:
         pass
-    return "晴", "20℃ ~ 25℃"
+    return "晴", "25℃"
 
 def get_week_day_str():
     week_list = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     return week_list[datetime.datetime.now().weekday()]
 
 def get_gpt_message(weather, temp, week_day):
-    """生成李杨给琪琪的早安"""
     if not GPT_API_KEY:
-        return "煤气早安！今天也是爱你的一天❤️", "记得吃早饭，照顾好自己！"
+        return "煤气早安！爱你❤️", "记得吃早饭！"
 
-    print("正在请求 GPT 生成文案...")
+    print("正在请求 GPT 生成精简文案...")
     
+    # 🔥 核心修改：极简模式 Prompt
     prompt = f"""
-    【角色设定】
-    你叫“李杨”（昵称：杨杨、煤气罐），北邮研究生。
-    女朋友叫“江琪”（昵称：琪琪、煤气），中大商学院本科生。
-    
-    【今日情报】
-    深圳，{weather}，{temp}，{week_day}。
+    【角色】李杨（北邮研究生，煤气罐） x 江琪（中大本科生，煤气）。
+    【情报】深圳 {weather} {temp} {week_day}。
     
     【任务】
-    生成两段话，用 "|||" 隔开：
-    1. 第一段（love_msg）：语气宠溺、稳重但深情。结合天气/周几/异地恋/学校生活写。
-    2. 第二段（suggestion）：温馨的日常嘱咐（防晒/带伞/喝水/心情）。
+    生成两句极短的话，用 "|||" 隔开：
+    1. 第一句(love_msg)：一句话情书。必须**超级简短**（20字以内），甜度爆表，一眼心动。
+    2. 第二句(suggestion)：最核心的叮嘱（10字以内）。
     
-    例子：
-    煤气早安！今天周五啦，刚才在实验室就在想你，深圳降温了，要乖乖穿外套哦✨|||今天风大，出门记得戴好我送你的围巾，不许只要风度不要温度🧣
+    【反例(太长不要)】：
+    今天天气变冷了，你要记得多穿衣服，不要着凉了... (❌ 这种会被微信折叠)
+    
+    【正例(要这种)】：
+    降温了，想把你揣进我的口袋里取暖✨|||乖乖穿厚外套🧣
     """
 
     headers = {
@@ -87,7 +87,6 @@ def get_gpt_message(weather, temp, week_day):
     }
 
     try:
-        # 使用兼容性好的中转地址
         url = "https://api.openai-proxy.com/v1/chat/completions"
         resp = requests.post(url, headers=headers, json=data, timeout=30)
         resp_json = resp.json()
@@ -98,25 +97,23 @@ def get_gpt_message(weather, temp, week_day):
                 parts = content.split("|||")
                 return parts[0].strip(), parts[1].strip()
             else:
-                return content, "今天要开开心心的！"
+                return content[:20], "今天要开心！"
     except Exception as e:
         print(f"GPT 请求失败: {e}")
         
-    return "煤气早安！GitHub有点卡，但我想你不会卡❤️", "记得按时吃饭！"
+    return "GitHub卡了，但我依然爱你❤️", "照顾好自己"
 
 def send_message():
     token = get_access_token()
     if not token: return
 
-    # 1. 获取数据
     weather, temp = get_weather()
     week_day = get_week_day_str()
     today_date = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # 2. 让 GPT 生成文案
+    # 获取精简文案
     msg_1, msg_2 = get_gpt_message(weather, temp, week_day)
     
-    # 3. 循环发送给所有人
     for user_id in USERS:
         print(f"☁️ 正在发送给: {user_id}")
         url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={token}"
@@ -126,13 +123,13 @@ def send_message():
             "template_id": TEMPLATE_ID,
             "url": CLICK_URL, 
             "data": {
-                # 这里的 key 必须和微信模板里的 {{xxxx.DATA}} 一一对应
                 "date": {"value": f"{today_date} {week_day}", "color": "#FF69B4"},
                 "city": {"value": CITY, "color": "#173177"},
                 "weather": {"value": weather, "color": "#FFA500"},
                 "temperature": {"value": temp, "color": "#00CC00"},
-                "love_msg": {"value": msg_1, "color": "#FF1493"},   # 对应 {{love_msg.DATA}}
-                "suggestion": {"value": msg_2, "color": "#9370DB"}  # 对应 {{suggestion.DATA}}
+                # 这里的颜色我调成了更醒目的深粉色
+                "love_msg": {"value": msg_1, "color": "#FF1493"},   
+                "suggestion": {"value": msg_2, "color": "#9370DB"}  
             }
         }
         
