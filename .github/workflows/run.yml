@@ -2,8 +2,8 @@ name: 琪琪早安推送
 
 on:
   schedule:
-    # 北京时间每天早上 7:30 自动运行 (UTC 23:30)
-    - cron: '30 23 * * *'
+    # 每隔 30 分钟运行一次
+    - cron: '*/30 * * * *'
   workflow_dispatch: # 允许手动测试
 
 jobs:
