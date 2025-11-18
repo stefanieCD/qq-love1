@@ -16,15 +16,14 @@ except KeyError:
     print("❌ 错误：Secrets 变量缺失！")
     sys.exit(1)
 
-# 👥 接收人列表 (把所有人的ID都放在这里)
+# 👥 接收人列表 (两人都会收到)
 USERS = [
     "o13257d7f-0B3aLMx8UGIAaGZkUY",  # 琪琪 (煤气)
-    "o13257XIz2XpWkacUw08fny0mNyE"   # 新增的用户
+    "o13257XIz2XpWkacUw08fny0mNyE"   # 李杨 (煤气罐)
 ]
 
 CITY = "深圳"
-# 点击卡片跳转的地址 (比如深圳天气页)
-CLICK_URL = "https://tianqi.qq.com/index.htm" 
+CLICK_URL = "https://tianqi.qq.com/index.htm" # 点击跳转天气页
 # ==========================================
 
 def get_access_token():
@@ -69,8 +68,8 @@ def get_gpt_message(weather, temp, week_day):
     
     【任务】
     生成两段话，用 "|||" 隔开：
-    第一段（情话）：语气宠溺、稳重但深情。结合天气/周几/异地恋/学校生活写。
-    第二段（建议）：温馨的日常嘱咐（防晒/带伞/喝水/心情）。
+    1. 第一段（love_msg）：语气宠溺、稳重但深情。结合天气/周几/异地恋/学校生活写。
+    2. 第二段（suggestion）：温馨的日常嘱咐（防晒/带伞/喝水/心情）。
     
     例子：
     煤气早安！今天周五啦，刚才在实验室就在想你，深圳降温了，要乖乖穿外套哦✨|||今天风大，出门记得戴好我送你的围巾，不许只要风度不要温度🧣
@@ -109,13 +108,15 @@ def send_message():
     token = get_access_token()
     if not token: return
 
-    # 1. 获取数据 (只获取一次，保证两个人生日收到的是同样的内容)
+    # 1. 获取数据
     weather, temp = get_weather()
     week_day = get_week_day_str()
     today_date = datetime.datetime.now().strftime("%Y-%m-%d")
+    
+    # 2. 让 GPT 生成文案
     msg_1, msg_2 = get_gpt_message(weather, temp, week_day)
     
-    # 2. 循环发送给列表里的每一个人
+    # 3. 循环发送给所有人
     for user_id in USERS:
         print(f"☁️ 正在发送给: {user_id}")
         url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={token}"
@@ -125,12 +126,13 @@ def send_message():
             "template_id": TEMPLATE_ID,
             "url": CLICK_URL, 
             "data": {
+                # 这里的 key 必须和微信模板里的 {{xxxx.DATA}} 一一对应
                 "date": {"value": f"{today_date} {week_day}", "color": "#FF69B4"},
                 "city": {"value": CITY, "color": "#173177"},
                 "weather": {"value": weather, "color": "#FFA500"},
                 "temperature": {"value": temp, "color": "#00CC00"},
-                "love_msg": {"value": msg_1, "color": "#FF1493"},
-                "suggestion": {"value": msg_2, "color": "#9370DB"}
+                "love_msg": {"value": msg_1, "color": "#FF1493"},   # 对应 {{love_msg.DATA}}
+                "suggestion": {"value": msg_2, "color": "#9370DB"}  # 对应 {{suggestion.DATA}}
             }
         }
         
