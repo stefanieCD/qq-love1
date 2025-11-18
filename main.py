@@ -5,18 +5,16 @@ import sys
 import random
 
 # ==========================================
-# ☁️ 配置区：读取 GitHub Secrets
+# ☁️ 配置区
 # ==========================================
 try:
     APP_ID = os.environ["APP_ID"]
     APP_SECRET = os.environ["APP_SECRET"]
     USER_ID = os.environ["USER_ID"]
     TEMPLATE_ID = os.environ["TEMPLATE_ID"]
-    
-    # 读取你刚才添加的 GPT_API_KEY
     GPT_API_KEY = os.environ.get("GPT_API_KEY") 
 except KeyError:
-    print("❌ 错误：Secrets 变量缺失！请检查 GitHub 设置")
+    print("❌ 错误：Secrets 变量缺失！")
     sys.exit(1)
 
 CITY = "深圳"
@@ -43,28 +41,36 @@ def get_weather():
         pass
     return "晴", "20℃ ~ 25℃"
 
-# 🔥 核心升级：调用 GPT 生成情话
-def get_gpt_message(weather, temp):
+def get_week_day_str():
+    week_list = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    return week_list[datetime.datetime.now().weekday()]
+
+# 🔥 核心升级：更智能的 GPT 提示词
+def get_gpt_message(weather, temp, week_day):
     if not GPT_API_KEY:
         return None 
 
-    print("正在请求 GPT 生成文案...")
+    print("正在请求 GPT 生成更智能的文案...")
     
-    # ✨ 这里设定 GPT 的人设 (你可以随意改)
+    # 👇 这里是“注入灵魂”的关键
     prompt = f"""
-    你是一个温柔体贴的男朋友。你的女朋友叫“琪琪”。
+    你是一个超宠女朋友的男朋友，你的女朋友叫“琪琪”。
     
-    现在的天气情况是：
+    【今日情报】
     - 城市：深圳
     - 天气：{weather}
     - 温度：{temp}
+    - 今天是：{week_day}
     
-    请根据天气情况，写一段简短的早安问候语给琪琪。
-    要求：
-    1. 语气要超级宠溺、可爱，多用emoji表情。
-    2. 如果天气不好（下雨、降温），一定要提醒她注意身体或带伞。
-    3. 必须包含一句“早安”。
-    4. 字数控制在 60 字以内。
+    【任务要求】
+    请给琪琪写一段早安微信，要求：
+    1. 必须结合“天气”和“星期几”来发挥。
+       - 比如周一要安慰她有“周一综合症”，周五要祝贺她马上解放。
+       - 天气热要提醒防晒，下雨要提醒带伞，不要只报数据。
+    2. 语气要自然、生活化，像是在被窝里发给她的。可以带点小幽默或撒娇。
+    3. 结尾加一个温馨的建议（比如早餐吃什么，或者今天要喝奶茶）。
+    4. 不要出现“亲爱的”这种老土的称呼，叫“宝”、“琪琪”或者“小猪”。
+    5. 字数控制在 80 字以内，多用Emoji (✨💖☁️)。
     """
 
     headers = {
@@ -73,9 +79,9 @@ def get_gpt_message(weather, temp):
     }
     
     data = {
-        "model": "gpt-4o-mini", # 推荐用 4o-mini，便宜又聪明，如果没有权限则改回 gpt-3.5-turbo
+        "model": "gpt-4o-mini", 
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
+        "temperature": 0.8 # 调高一点，让它更活泼
     }
 
     try:
@@ -84,43 +90,28 @@ def get_gpt_message(weather, temp):
         resp_json = resp.json()
         
         if "choices" in resp_json:
-            content = resp_json["choices"][0]["message"]["content"]
-            return content.strip()
-        else:
-            print(f"GPT API 返回异常: {resp_json}")
+            return resp_json["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"GPT 请求失败: {e}")
         
     return None
 
-def get_love_words_fallback():
-    """备用方案"""
-    backups = [
-        "琪琪早安！今天也是超级想你的一天鸭！❤️",
-        "醒来觉得甚是爱你，要记得吃早饭哦！",
-        "世界一般般，但你超甜。今天也要开心！",
-    ]
-    return random.choice(backups)
+def get_fallback_msg():
+    return "琪琪早安！今天GitHub好像有点累，但我不累，依然超级爱你！记得吃早饭哦❤️"
 
 def send_message():
     token = get_access_token()
     if not token: return
 
     weather, temp = get_weather()
-    
-    # 优先尝试用 GPT 生成
-    love_word = get_gpt_message(weather, temp)
-    
-    # 如果 GPT 失败了，就用备用情话
-    if not love_word:
-        print("⚠️ GPT 生成失败，使用备用情话")
-        love_word = get_love_words_fallback()
-    else:
-        print(f"✅ GPT 生成成功: {love_word}")
-
+    week_day = get_week_day_str()
     today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    week_list = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-    week_day = week_list[datetime.datetime.now().weekday()]
+    
+    # 把星期几也传给 GPT，让它根据周几来写文案
+    love_word = get_gpt_message(weather, temp, week_day)
+    
+    if not love_word:
+        love_word = get_fallback_msg()
 
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={token}"
     
@@ -138,7 +129,7 @@ def send_message():
     
     resp = requests.post(url, json=data).json()
     if resp['errcode'] == 0:
-        print("✅ 推送成功！")
+        print(f"✅ 推送成功: {love_word}")
     else:
         print(f"❌ 推送失败: {resp}")
 
