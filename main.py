@@ -18,6 +18,8 @@ except KeyError:
     sys.exit(1)
 
 CITY = "深圳"
+# 👇 这里设置点击卡片后跳去哪里 (目前是深圳天气页，你可以换成任何网址)
+CLICK_URL = "https://tianqi.qq.com/index.htm" 
 # ==========================================
 
 def get_access_token():
@@ -45,32 +47,23 @@ def get_week_day_str():
     week_list = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     return week_list[datetime.datetime.now().weekday()]
 
-# 🔥 核心升级：更智能的 GPT 提示词
+# 🔥 核心升级：让 GPT 分两段输出
 def get_gpt_message(weather, temp, week_day):
     if not GPT_API_KEY:
-        return None 
+        return "今天也要开心呀！", "记得吃早饭哦！"
 
-    print("正在请求 GPT 生成更智能的文案...")
+    print("正在请求 GPT 生成双段文案...")
     
-    # 👇 这里是“注入灵魂”的关键
     prompt = f"""
     你是一个超宠女朋友的男朋友，你的女朋友叫“琪琪”。
+    今日情报：深圳，{weather}，{temp}，{week_day}。
     
-    【今日情报】
-    - 城市：深圳
-    - 天气：{weather}
-    - 温度：{temp}
-    - 今天是：{week_day}
+    请生成两段话，中间用 "|||" 这个符号隔开：
+    第一段（情话）：结合天气和星期几，写一段甜甜的问候，语气要软萌、宠溺，多用Emoji。
+    第二段（建议）：给出一个具体的行动建议（如穿衣、带伞、喝奶茶、吃什么早餐）。
     
-    【任务要求】
-    请给琪琪写一段早安微信，要求：
-    1. 必须结合“天气”和“星期几”来发挥。
-       - 比如周一要安慰她有“周一综合症”，周五要祝贺她马上解放。
-       - 天气热要提醒防晒，下雨要提醒带伞，不要只报数据。
-    2. 语气要自然、生活化，像是在被窝里发给她的。可以带点小幽默或撒娇。
-    3. 结尾加一个温馨的建议（比如早餐吃什么，或者今天要喝奶茶）。
-    4. 不要出现“亲爱的”这种老土的称呼，叫“宝”、“琪琪”或者“小猪”。
-    5. 字数控制在 80 字以内，多用Emoji (✨💖☁️)。
+    例子格式：
+    宝早安！今天周五啦，离见面又近了一步，深圳今天阳光很好，想和你一起晒太阳✨|||今天紫外线有点强，出门记得涂防晒，还要带上我送你的小水壶哦💧
     """
 
     headers = {
@@ -81,7 +74,7 @@ def get_gpt_message(weather, temp, week_day):
     data = {
         "model": "gpt-4o-mini", 
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.8 # 调高一点，让它更活泼
+        "temperature": 0.8
     }
 
     try:
@@ -90,14 +83,18 @@ def get_gpt_message(weather, temp, week_day):
         resp_json = resp.json()
         
         if "choices" in resp_json:
-            return resp_json["choices"][0]["message"]["content"].strip()
+            content = resp_json["choices"][0]["message"]["content"].strip()
+            # 尝试分割
+            if "|||" in content:
+                parts = content.split("|||")
+                return parts[0].strip(), parts[1].strip()
+            else:
+                # 如果GPT没按套路出牌，就手动切一下或者当做一段
+                return content, "今天要开开心心的！"
     except Exception as e:
         print(f"GPT 请求失败: {e}")
         
-    return None
-
-def get_fallback_msg():
-    return "琪琪早安！今天GitHub好像有点累，但我不累，依然超级爱你！记得吃早饭哦❤️"
+    return "琪琪早安！GitHub虽然累了，但我依然爱你❤️", "记得按时吃饭，照顾好自己！"
 
 def send_message():
     token = get_access_token()
@@ -107,29 +104,30 @@ def send_message():
     week_day = get_week_day_str()
     today_date = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # 把星期几也传给 GPT，让它根据周几来写文案
-    love_word = get_gpt_message(weather, temp, week_day)
+    # 获取两段文案
+    msg_1, msg_2 = get_gpt_message(weather, temp, week_day)
     
-    if not love_word:
-        love_word = get_fallback_msg()
-
     url = f"https://api.weixin.qq.com/cgi-bin/message/template/send?access_token={token}"
     
     data = {
         "touser": USER_ID,
         "template_id": TEMPLATE_ID,
+        "url": CLICK_URL, # 👈 这里添加了跳转链接，现在卡片可以点击了！
         "data": {
             "date": {"value": f"{today_date} {week_day}", "color": "#FF69B4"},
             "city": {"value": CITY, "color": "#173177"},
             "weather": {"value": weather, "color": "#FFA500"},
             "temperature": {"value": temp, "color": "#00CC00"},
-            "note": {"value": love_word, "color": "#FF1493"}
+            # 第一段：情话
+            "love_msg": {"value": msg_1, "color": "#FF1493"},
+            # 第二段：建议
+            "suggestion": {"value": msg_2, "color": "#9370DB"}
         }
     }
     
     resp = requests.post(url, json=data).json()
     if resp['errcode'] == 0:
-        print(f"✅ 推送成功: {love_word}")
+        print(f"✅ 推送成功")
     else:
         print(f"❌ 推送失败: {resp}")
 
